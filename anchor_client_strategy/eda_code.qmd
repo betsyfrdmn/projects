@@ -1,0 +1,117 @@
+---
+title: "Group Project"
+format: pdf
+editor: visual
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+```
+
+```{r}
+job_postings <- read_csv("archive/postings.csv")
+company_industries <- read_csv("archive/companies/company_industries.csv")
+
+```
+
+```{r}
+merged <- job_postings |>
+  inner_join(company_industries, by = "company_id")
+dim(job_postings)
+dim(company_industries)
+dim(merged)
+names(merged)
+```
+
+```{r}
+industry_counts <- merged |>
+  group_by(industry) |>
+  summarize(total_postings = n(), .groups = "drop") |>
+  arrange(desc(total_postings)) |>
+  slice_head(n=10) |>
+  mutate(se = sqrt(total_postings),
+         ci_lower = total_postings - 1.96*se,
+         ci_upper = total_postings + 1.96*se) 
+```
+
+```{r}
+ggplot(industry_counts, aes(x = reorder(industry, total_postings), y = total_postings)) +
+  geom_col(fill = "steelblue") +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.3, color = "black") +
+  labs(
+    title = "Top 10 Industries with 95% CI",
+    x = "Industry",
+    y = "Number of Job Postings"
+  ) +
+  coord_flip() +
+  theme_minimal()
+```
+
+```{r}
+industry_counts |> ggplot(aes(x = reorder(industry, total_postings), y = total_postings)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Top 10 Industries by Number of Job Postings",
+    x = "Industry",
+    y = "Number of Job Postings"
+  ) +
+  coord_flip() +
+  theme_minimal()
+```
+
+```{r}
+company_postings <- merged |>
+  group_by(company_name, industry) |>         
+  summarize(total_postings = n(), .groups = "drop") |>
+  arrange(desc(total_postings)) |>
+  slice_head(n = 20)
+
+company_postings <- company_postings |>
+  mutate(label = paste0(company_name, "\n(", industry, ")"))
+
+company_postings |> 
+  ggplot(aes(x = reorder(label, total_postings), y = total_postings)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Top 20 Companies by Number of Job Postings",
+    x = "Company (Industry)",
+    y = "Number of Job Postings"
+  ) +
+  coord_flip() +
+  theme_minimal()
+```
+
+```{r, fig.width=17, fig.height=10}
+selected_industries <- c(
+  "Staffing and Recruiting", 
+  "Hospitals and Health Care", 
+  "IT Services and IT Consulting", 
+  "Software Development", 
+  "Financial Services"
+)
+
+filtered <- merged |>
+  filter(industry %in% selected_industries)
+
+company_counts <- filtered |>
+  group_by(industry, company_name) |>
+  summarize(total_postings = n(), .groups = "drop") |>
+  arrange(industry, desc(total_postings)) |>
+  group_by(industry) |>
+  slice_head(n = 15) |>     
+  ungroup() |>
+  mutate(label = paste0(company_name, "\n(", total_postings, ")"))
+
+company_counts |>
+  ggplot(aes(x = reorder(label, total_postings), y = total_postings, fill = industry)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ industry, scales = "free_y") +  
+  coord_flip() +
+  labs(
+    title = "Top 15 Companies by Job Postings in Selected Industries",
+    x = "Company (Job Postings)",
+    y = "Number of Job Postings"
+  ) +
+  theme_minimal()
+```

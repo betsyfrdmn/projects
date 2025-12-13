@@ -1,0 +1,365 @@
+---
+title: "final_project"
+format: pdf
+editor: visual
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+library(ggraph)
+library(tidytext)
+library(textdata)
+library(gt)
+library(quanteda.extras)
+library(quanteda)
+library(quanteda.textstats)
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
+library(ggplot2)
+library(patchwork)
+library(udpipe)
+library(kableExtra)
+library(stringr)
+library(readr)
+```
+
+```{r}
+data <- read_csv("~/Desktop/filtered_articles.csv")
+afinn_lexicon <- get_sentiments("afinn")
+```
+
+```{r}
+data$bodyContent <- data$bodyContent %>%
+    str_replace_all("â\u0080\u0099", "'") %>%  # Fixes apostrophes (e.g., Azizâ\u0080\u0099s -> Aziz's)
+    str_replace_all("â\u0080\u0098", "'") %>%  # Fixes left single quotes
+    str_replace_all("â\u0080\u0093", "--") %>% # Fixes en-dashes (long hyphen)
+    str_replace_all("â\u0080\u009c|â\u0080\u009d", "\"") %>% # Fixes smart double quotes
+    str_replace_all("Â£", "GBP ") # Fixes corrupted currency symbols
+```
+
+```{r}
+data$doc_id <- paste0("doc_", seq_len(nrow(data)))
+corpus <- corpus(data, text_field = "bodyContent", docid_field = "doc_id")
+tokens_raw <- tokens(corpus, remove_punct = TRUE, remove_symbols = TRUE) |>
+  tokens_tolower()
+```
+
+```{r}
+number_of_tokens <- sum(ntoken(tokens_raw))
+
+summary_table <- data.frame(
+    "Metric" = c("Total Articles", "Total Tokens (Raw)"),
+    "Count" = c(ndoc(corpus), number_of_tokens)
+)
+print(summary_table)
+
+dfm_raw <- dfm(tokens_raw)
+
+```
+
+```{r}
+all_keywords <- c("islam", "muslim", "muslims", "islamic",
+                  "christianity", "christians", "christian",
+                  "judaism", "jew", "jews", "jewish")
+
+islam_keywords <- c("islam", "muslim", "muslims", "islamic")
+christianity_keywords <- c("christianity", "christians", "christian")
+judaism_keywords <- c("judaism", "jew", "jews", "jewish")
+
+religion_groups <- list(
+    Islam = islam_keywords,
+    Christianity = christianity_keywords,
+    Judaism = judaism_keywords
+)
+```
+
+```{r}
+counts <- sapply(religion_groups, function(words) {
+  sum(dfm_raw[, words])
+})
+
+counts
+```
+
+```{r}
+all_keywords <- c("islam", "muslim", "muslims", "islamic",
+                  "christianity", "christians",
+                  "judaism", "jew", "jews", "jewish")
+
+islam_keywords <- c("islam", "muslim", "muslims", "islamic")
+christianity_keywords <- c("christianity", "christians")
+judaism_keywords <- c("judaism", "jew", "jews", "jewish")
+
+religion_groups <- list(
+    Islam = islam_keywords,
+    Christianity = christianity_keywords,
+    Judaism = judaism_keywords
+)
+```
+
+```{r}
+counts <- sapply(religion_groups, function(words) {
+  sum(dfm_raw[, words])
+})
+
+counts
+```
+
+```{r}
+tokens_grouped <- tokens_raw |>
+  quanteda::tokens_replace(
+    pattern = islam_keywords,
+    replacement = rep("islam", length(islam_keywords)),
+    valuetype = "fixed" 
+  ) |>
+  quanteda::tokens_replace(
+    pattern = christianity_keywords,
+    replacement = rep("christianity", length(christianity_keywords)),
+    valuetype = "fixed" 
+  ) |>
+    quanteda::tokens_replace(
+    pattern = judaism_keywords,
+    replacement = rep("judaism", length(judaism_keywords)),
+    valuetype = "fixed" 
+  )
+```
+
+```{r}
+window_size <- 5
+MIN_COL_FREQ <- 20 
+MIN_PMI_SCORE <- 5
+
+islam_collocates <- collocates_by_MI(
+    tokens_grouped, 
+    "islam", 
+    left = window_size, 
+    right = window_size
+) |>
+    filter(col_freq >= MIN_COL_FREQ, PMI >= MIN_PMI_SCORE)
+
+christianity_collocates <- collocates_by_MI(
+    tokens_grouped, 
+    "christianity", 
+    left = window_size, 
+    right = window_size
+) |>
+    filter(col_freq >= MIN_COL_FREQ, PMI >= MIN_PMI_SCORE)
+
+judaism_collocates <- collocates_by_MI(
+    tokens_grouped, 
+    "judaism", 
+    left = window_size, 
+    right = window_size
+) |>
+    filter(col_freq >= MIN_COL_FREQ, PMI >= MIN_PMI_SCORE)
+
+```
+
+```{r}
+cat("\n--- Top 10 Collocates by PMI for the unified 'islam' node ---\n")
+islam_collocates |> head(10) |> gt()
+christianity_collocates |> head(10) |> gt()
+judaism_collocates |> head(10) |> gt()
+
+```
+
+```{r}
+TOP_N_NODES <- 25
+
+# 1. ISLAM
+islam_collocates_top <- islam_collocates |>
+    dplyr::arrange(desc(PMI)) |> 
+    head(TOP_N_NODES)
+
+# 2. CHRISTIANITY
+christianity_collocates_top <- christianity_collocates |>
+    dplyr::arrange(desc(PMI)) |>
+    head(TOP_N_NODES)
+
+# 3. JUDAISM
+judaism_collocates_top <- judaism_collocates |>
+    dplyr::arrange(desc(PMI)) |>
+    head(TOP_N_NODES)
+
+
+plot_individual_network <- function(net_object, title) {
+    print(
+        ggraph(net_object, weight = link_weight, layout = "stress") + 
+            geom_edge_link(color = "gray80", alpha = .75) + 
+            geom_node_point(aes(alpha = node_weight, size = 3), color = "skyblue") + 
+            geom_node_text(aes(label = label), repel = T, size = 3) +
+            scale_alpha(range = c(0.2, 0.9)) +
+            labs(title = title) +
+            theme_graph() +
+            theme(legend.position="none")
+    )
+}
+
+
+# A. ISLAM Network
+# Use the filtered table for the network creation
+net_islam <- col_network(islam_collocates_top, islam_collocates_top)
+plot_individual_network(net_islam, "Top 25 Collocates of Islam")
+
+# B. CHRISTIANITY Network (UPDATED)
+net_christianity <- col_network(christianity_collocates_top, christianity_collocates_top)
+plot_individual_network(net_christianity, "Top 25 Collocates of Christianity")
+
+# C. JUDAISM Network (UPDATED)
+net_judaism <- col_network(judaism_collocates_top, judaism_collocates_top)
+plot_individual_network(net_judaism, "Top 25 Collocates of Judaism")
+
+
+```
+
+
+```{r}
+TOP_N_COMBINED <- 50
+
+islam_top_combined <- islam_collocates %>%
+    arrange(desc(PMI)) %>%
+    head(TOP_N_COMBINED)
+
+christianity_top_combined <- christianity_collocates %>%
+    arrange(desc(PMI)) %>%
+    head(TOP_N_COMBINED)
+
+judaism_top_combined <- judaism_collocates %>%
+    arrange(desc(PMI)) %>%
+    head(TOP_N_COMBINED)
+
+net_icj <- col_network(
+    islam_top_combined,
+    christianity_top_combined,
+    judaism_top_combined
+)
+
+ggraph(net_icj, weight = link_weight, layout = "stress") +
+    geom_edge_link(aes(alpha = link_weight), color = "gray40") +
+    
+    # Color by number of intersecting religions (0–7)
+    geom_node_point(aes(
+        color = factor(n_intersects),
+        size = 2,
+        alpha = node_weight
+    )) +
+    
+    geom_node_text(aes(label = label), repel = TRUE, size = 3) +
+    
+    scale_alpha(range = c(0.2, 0.9)) +
+    labs(
+        title = "Collocational Network: Islam, Christianity, and Judaism",
+        subtitle = "Red nodes represent the main religion terms. Green nodes represent collocates unique to one religion. Blue nodes represent collocates shared across two religions. Darker edges reflect stronger association (higher collocational weight).") +
+    theme_graph() +
+    theme(legend.position = "bottom")
+
+```
+
+```{r}
+# Define the merging function (FIXED)
+analyze_collocate_sentiment <- function(collocate_data, lexicon = afinn_lexicon) {
+    
+    collocate_data <- collocate_data %>%
+        dplyr::rename(collocate = 1)
+        
+    # 2. Join the sentiment scores onto the collocate words
+    scored_data <- collocate_data %>%
+        dplyr::left_join(lexicon, by = c(collocate = "word")) %>%
+        # Fill NA scores with 0 (assuming neutral if not in lexicon)
+        dplyr::mutate(value = tidyr::replace_na(value, 0))
+
+    # 3. Calculate a Total Weighted Sentiment Score
+    weighted_data <- scored_data %>%
+        dplyr::mutate(
+            weighted_score = value * PMI,
+            is_negative = value < 0,
+            is_positive = value > 0
+        )
+        
+    return(weighted_data)
+}
+```
+
+```{r}
+
+# Run the analysis for all three religions
+islam_sentiment <- analyze_collocate_sentiment(islam_collocates)
+christianity_sentiment <- analyze_collocate_sentiment(christianity_collocates)
+judaism_sentiment <- analyze_collocate_sentiment(judaism_collocates)
+
+# 1. Prepare Islam data (All non-zero sentiment collocates)
+islam_data <- islam_sentiment %>%
+    dplyr::filter(value != 0) %>%
+    dplyr::mutate(Religion = "Islam") %>%
+    dplyr::select(Collocate = collocate, Religion, `AFINN Score` = value, 
+                  `Weighted PMI` = weighted_score, `Co-occurrence Count` = col_freq)
+
+# 2. Prepare Christianity data (All non-zero sentiment collocates)
+christianity_data <- christianity_sentiment %>%
+    dplyr::filter(value != 0) %>%
+    dplyr::mutate(Religion = "Christianity") %>%
+    dplyr::select(Collocate = collocate, Religion, `AFINN Score` = value, 
+                  `Weighted PMI` = weighted_score, `Co-occurrence Count` = col_freq)
+
+# 3. Prepare Judaism data (All non-zero sentiment collocates)
+judaism_data <- judaism_sentiment %>%
+    dplyr::filter(value != 0) %>%
+    dplyr::mutate(Religion = "Judaism") %>%
+    dplyr::select(Collocate = collocate, Religion, `AFINN Score` = value, 
+                  `Weighted PMI` = weighted_score, `Co-occurrence Count` = col_freq)
+
+# 4. Combine all data and sort for the final paper table (Table 4)
+final_sentiment_drivers <- bind_rows(islam_data, christianity_data, judaism_data) %>%
+    # Sort by sentiment score (descending for positive first, ascending for negative last)
+    dplyr::arrange(desc(`AFINN Score`), desc(`Weighted PMI`))
+
+# Now print the combined table for inspection (using the data frame method for reliability)
+print(final_sentiment_drivers, n = Inf)
+
+
+```
+
+```{r}
+# Aggregate for Comparison Table
+
+# Function to calculate aggregate metrics
+aggregate_sentiment <- function(scored_data) {
+    metrics <- scored_data %>%
+        dplyr::summarise(
+            Mean_Sentiment = mean(value),
+
+            Total_Weighted_PMI = sum(weighted_score),
+
+            Total_Negative_Words = sum(is_negative),
+            Total_Positive_Words = sum(is_positive)
+        )
+    return(metrics)
+}
+
+# Combine the results into a single table
+sentiment_comparison <- bind_rows(
+    aggregate_sentiment(islam_sentiment) %>% mutate(Religion = "Islam"),
+    aggregate_sentiment(christianity_sentiment) %>% mutate(Religion = "Christianity"),
+    aggregate_sentiment(judaism_sentiment) %>% mutate(Religion = "Judaism")
+) %>%
+    dplyr::relocate(Religion)
+
+# Print the final comparative table
+cat("\n--- Final Collocate Sentiment Comparison Table ---\n")
+sentiment_comparison %>% knitr::kable()
+
+# Visualization
+# Plot the average sentiment to clearly show the difference
+sentiment_comparison %>%
+    ggplot(aes(x = Religion, y = Mean_Sentiment, fill = Religion)) +
+    geom_bar(stat = "identity") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    labs(
+        title = "Average Sentiment of Strongest Collocates by Religion",
+        y = "Average AFINN Score (Negative to Positive)"
+    ) +
+    theme_minimal()
+```
