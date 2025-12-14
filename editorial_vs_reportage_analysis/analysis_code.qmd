@@ -1,0 +1,285 @@
+---
+title: "CBE 1 Final Draft"
+format: 
+  pdf:
+    documentclass: article
+author: 
+- "Betsy Fridman"    
+geometry:
+  - top=0.75in
+  - bottom=0.75in
+  - left=0.5in
+  - right=0.5in
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+library(quanteda)
+library(quanteda.textstats)
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
+library(ggplot2)
+library(patchwork)
+```
+
+```{r}
+eval_words <- c(
+  "good","bad","excellent","terrible","important","significant","serious",
+  "major","minor","critical","remarkable","notable","great","poor","strong",
+  "weak","ineffective","favorable","unfavorable","best","worst",
+  "ideal","problematic","clear","unclear","positive","negative","superior","inferior",
+  "desirable","undesirable","appropriate","inappropriate","satisfactory","unsatisfactory",
+  "advantageous","disadvantageous","helpful","harmful","correct","incorrect",
+  "reasonable","unreasonable","prominent","noteworthy"
+)
+
+stance_words <- c(
+  "may","might","must","should","could","would","can","cannot","likely",
+  "possibly","probably","certainly","definitely","obviously","apparently",
+  "perhaps","clearly","undoubtedly","arguably","seem","seems","suggest",
+  "suggests","indicate","indicates","appear","appears","believe","believes",
+  "assume","assumes","tend","tends","likely","unlikely","possibly","probably"
+)
+```
+
+```{r}
+brown_folder <- "~/Desktop/Text Analysis/brown_corpus"
+files <- list.files(brown_folder, pattern = "\\.txt$", full.names = TRUE)
+texts <- lapply(files, function(f) {
+  paste(readLines(f, encoding = "UTF-8"), collapse = " ")
+})
+doc_ids <- basename(files)
+
+
+genre_map <- c(
+  A = "Press: Reportage",
+  B = "Press: Editorial",
+  C = "Press: Reviews",
+  D = "Religion",
+  E = "Skills & Hobbies",
+  F = "Popular Lore",
+  G = "Belles Lettres",
+  H = "Miscellaneous",
+  J = "Learned",
+  K = "Fiction: General",
+  L = "Fiction: Mystery/Detective",
+  M = "Fiction: Science Fiction",
+  N = "Fiction: Adventure",
+  P = "Romance",
+  R = "Humor"
+)
+genre_code <- substr(doc_ids, 1, 1)
+brown_df <- data.frame(
+  doc_id = doc_ids,
+  text = unlist(texts),
+  genre_code = genre_code,
+  genre = genre_map[genre_code],
+  stringsAsFactors = FALSE
+)
+
+brown_corpus <- corpus(brown_df, text_field = "text", docid_field = "doc_id")
+editorial_corpus <- corpus_subset(brown_corpus, genre == "Press: Editorial")
+reportage_corpus <- corpus_subset(brown_corpus, genre == "Press: Reportage")
+```
+
+```{r}
+tokens_editorial <- tokens(editorial_corpus, remove_punct=TRUE, remove_symbols=TRUE) |> 
+  tokens_tolower()
+tokens_reportage <- tokens(reportage_corpus, remove_punct=TRUE, remove_symbols=TRUE) |> 
+  tokens_tolower()
+
+total_tokens_editorial <- sum(ntoken(tokens_editorial))
+total_tokens_reportage <- sum(ntoken(tokens_reportage))
+
+
+summary_table <- data.frame(
+  "Subcorpus" = c("Tokens (words)", "Files"), 
+  "Press: Editorial" = c(total_tokens_editorial, ndoc(editorial_corpus)),
+  "Press: Reportage" = c(total_tokens_reportage, ndoc(reportage_corpus))
+)
+```
+
+```{r}
+dfm_editorial <- dfm(tokens_editorial)
+dfm_reportage <- dfm(tokens_reportage)
+```
+
+```{r}
+dfm_editorial_eval <- dfm_select(dfm_editorial, pattern = eval_words)
+dfm_reportage_eval <- dfm_select(dfm_reportage, pattern = eval_words)
+
+
+dfm_combined_eval <- rbind(dfm_reportage_eval, dfm_editorial_eval)
+target_eval <- c(rep(FALSE, ndoc(dfm_reportage_eval)), rep(TRUE, ndoc(dfm_editorial_eval)))
+keys_eval <- textstat_keyness(dfm_combined_eval, target = target_eval, measure = "lr") 
+
+freq_editorial_eval <- textstat_frequency(dfm_editorial_eval) |>
+  mutate(per_1000_words = 1000 * frequency / total_tokens_editorial) |>
+  select(-group)
+freq_reportage_eval <- textstat_frequency(dfm_reportage_eval) |>
+  mutate(per_1000_words = 1000 * frequency / total_tokens_reportage) |>
+  select(-group)
+```
+
+```{r}
+dfm_editorial_stance <- dfm_select(dfm_editorial, pattern = stance_words)
+dfm_reportage_stance <- dfm_select(dfm_reportage, pattern = stance_words)
+
+
+dfm_combined_stance <- rbind(dfm_reportage_stance, dfm_editorial_stance)
+target_stance <- c(rep(FALSE, ndoc(dfm_reportage_stance)), rep(TRUE, ndoc(dfm_editorial_stance)))
+keys_stance <- textstat_keyness(dfm_combined_stance, target = target_stance, measure = "lr") 
+
+
+freq_editorial_stance <- textstat_frequency(dfm_editorial_stance) |>
+  mutate(per_1000_words = 1000 * frequency / total_tokens_editorial) |>
+  select(-group)
+freq_reportage_stance <- textstat_frequency(dfm_reportage_stance) |>
+  mutate(per_1000_words = 1000 * frequency / total_tokens_reportage) |>
+  select(-group)
+```
+
+# Introduction
+
+For this experiment, I aim to investigate how language differs in editorial and reportage papers. My question of interest is, "How do the frequency of evaluative and stance-related words differ between the editorial and reportage genres?". This is particularly interesting because editorials are expected to convey more opinionated, subjective statements, whereas reportage generally aims to present unbiased, factual stories. By comparing the relative frequencies and keyness of evaluative and stance-related words across the two subcorpora, 
+
+# Data
+
+The corpus I used was the Brown Corpus, and was compiled in the 1960s. Containing 500 texts, it was the first major structured corpus of American English text that included different genres. For this study, I chose to compare the press editorial and press reportage subcorpora, made up of 27 and 44 texts respectively. The texts were tokenized and converted to lowercase to keep the words standardized.
+
+```{r}
+summary_table |>
+  kable("latex", booktabs = TRUE, caption = "Overview of Subcorpora") |>
+  kable_styling(latex_options = "hold_position")
+```
+
+# Methods
+
+To find the differences in language use, I focused on evaluative words, which convey judgement or feelings (e.g., *good*, *bad*, *significant*), and stance words, which express the author's certainty or perspective (e.g., modal verbs like *may*, *might*, *must*, or hedge words like *possibly* or *likely*). I selected these categories because editorials tend to be opinionated, while reportages tend to present factual information. By comparing the frequency and keyness of evaluative and stance words, I am able to highlight the linguistic difference between texts written based on opinion or fact. I created a document-feature matrix (DFM) for each subcorpus and computed their relative frequencies per 1,000 tokens, doing this separately for evaluative words and stance words. The log-likelihood keyness test was used to identify words that are statistically key to one subcorpus, relative to the other. Words with higher log-likelihood ($G^2$) values have a stronger association with a subcorpus, and are considered key.
+
+# Results
+
+```{r, fig.width=18, fig.height=3.5}
+top_eval <- bind_rows(
+  freq_editorial_eval |>
+    arrange(desc(per_1000_words)) |>
+    slice(1:10) |>
+    mutate(Subcorpus = "Editorial"),
+  freq_reportage_eval |>
+    arrange(desc(per_1000_words)) |>
+    slice(1:10) |>
+    mutate(Subcorpus = "Reportage")
+)
+
+top_stance <- bind_rows(
+  freq_editorial_stance |>
+    arrange(desc(per_1000_words)) |>
+    slice(1:10) |>
+    mutate(Subcorpus = "Editorial"),
+  freq_reportage_stance |>
+    arrange(desc(per_1000_words)) |>
+    slice(1:10) |>
+    mutate(Subcorpus = "Reportage")
+)
+
+
+p1 <- ggplot(top_eval, aes(x = reorder(feature, per_1000_words), 
+                           y = per_1000_words, fill = Subcorpus)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(
+    title = "Figure 1: Top 10 Evaluative Words per Subcorpus",
+    x = "Word",
+    y = "Relative Frequency per 1,000 tokens"
+  ) +
+  theme_minimal()
+
+p2 <- ggplot(top_stance, aes(x = reorder(feature, per_1000_words), 
+                             y = per_1000_words, fill = Subcorpus)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(
+    title = "Figure 2: Top 10 Stance Words per Subcorpus",
+    x = "Word",
+    y = "Relative Frequency per 1,000 tokens"
+  ) +
+  theme_minimal()
+p1+p2
+```
+
+```{r}
+tab1 <- head(freq_editorial_eval, 10)
+tab2 <- head(freq_reportage_eval, 10)
+tab1 <- tab1 |> rename_with(~paste0(.,"_ed"))
+tab2 <- tab2 |> rename_with(~paste0(.,"_rep"))
+
+combined <- cbind(tab1, tab2)
+combined |>
+  kable("latex", booktabs = TRUE, caption = "Editorial vs Reportage Evaluative Word Frequencies Side by Side") |>
+  kable_styling(font_size = 6, latex_options = "hold_position")
+```
+
+```{r}
+tab1 <- head(freq_editorial_stance, 10)
+tab2 <- head(freq_reportage_stance, 10)
+tab1 <- tab1 |> rename_with(~paste0(.,"_ed"))
+tab2 <- tab2 |> rename_with(~paste0(.,"_rep"))
+
+combined <- cbind(tab1,tab2)
+combined |> kable("latex", booktabs = TRUE, caption = "Editorial vs Reportage Stance-Related Word Frequencies Side by Side") |>
+  kable_styling(font_size = 6, latex_options = "hold_position")
+```
+
+Editorials have higher relative frequencies of evaluative words (e.g., *good*, *great*, *best*, *important*) and of stance words (e.g., *would*, *can*, *should*), whereas reportage uses them less frequently. Log-likelihood analysis is used to indicate proportionally how much more often a word is used, with the editorials as my target corpus and the reportages as my reference corpus.
+
+```{r}
+tab1 <- keys_eval |>
+  arrange(desc(G2)) |>
+  head(10) |>
+  rename_with(~paste0(.,"_eval"))
+
+tab2 <- keys_stance |>
+  arrange(desc(G2)) |>
+  head(10) |>
+  rename_with(~paste0(.,"_stance"))
+
+combined <- cbind(tab1, tab2)
+
+combined |>
+  kable("latex", booktabs = TRUE,
+        caption = "Top 10 Evaluative and Stance Words by Log-Likelihood (G²)") |>
+  kable_styling(font_size = 6, latex_options = "hold_position")
+
+```
+
+For evaluative words, *helpful* is signficant ($G^2$=5.52, $p=0.019$), and *good*, *bad*, and *great* appear more frequent in editorials but their frequencies aren't different with statistical significance. For stance words, *seems* ($G^2$=5.83, $p=0.016$), *cannot* ($G^2$=5.82, $p=0.016$), *certainly* ($G^2$=5.39, $p=0.020$), and *should* ($G^2$=5.01, $p=0.025$) have statistically significant higher frequencies in editorials. These results indicate that editorial writers use more modal verbs or hedging words.
+
+```{r}
+tab1 <- keys_eval |>
+  arrange(G2) |>       
+  head(10) |>          
+  rename_with(~paste0(.,"_eval"))
+
+tab2 <- keys_stance |>
+  arrange(G2) |>     
+  head(10) |>         
+  rename_with(~paste0(.,"_stance"))
+
+combined <- cbind(tab1, tab2)
+
+combined |>
+  kable("latex", booktabs = TRUE,
+        caption = "Bottom 10 Evaluative and Stance Words by Log-Likelihood (G²)") |>
+  kable_styling(font_size = 6, latex_options = "hold_position")
+```
+
+For evaluative words, only *major* ($G^2$=-8.95, $p=0.003$) and *minor* ($G^2$=-4.72, $p=0.030$) occur more often in reportage texts with statistical significance. For stance words, the difference in frequency of *would* ($G^2$=-14.88, $p=0.0001$) and *could* ($G^2$=-8.16, $p=0.004$) has statistical significance. In both cases, most evaluative or stance-related words don't appear more common in reportages with statistical significance.
+
+# Discussion
+
+The results support the expectation that the editorials use both evaluative and stance-related language more frequently than reportages do. My analysis suggests that evaluative words are more present in the editorial subcorpus, but they may not be able to distinguish the two genres. On the other hand, the results for stance words showed a statistically significant difference between the two subcorpora. In editorials, stance markers like *seems*, *cannot*, *certainly*, and *should* were significantly more likely to be used; this reflects how editorial writing can have more difference in certainty or possibility well, when reportage tends to remain more neutral. From this analysis, stance-related words are more reliable for distinguishing genres.
+
+This study has many limitations. The Brown Corpus was put together in the 1960s, and may not accurately represent current news writing practices. The two subcorpora that I chose from the Brown Corpus, editorial press and reportage press, were of size 27 and 44 respectively. Not only are the subcorpora different sizes, but they were of small size, both of which can largely influence the analysis. Another limitation is the methods of choosing evaluative and stance words. Although I chose commonly used words from these categories, I don't have a comprehensive set of words that includes all of the possible evaluative and stance words, and some relevant ones in the corpus may have been left out of the analysis.
