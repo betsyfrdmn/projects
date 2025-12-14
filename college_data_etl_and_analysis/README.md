@@ -1,5 +1,3 @@
-# Blitzen
-
 1. Project Description
 
 We’re building an ETL pipeline that ingests and integrates annual College Scorecard and IPEDS data into a unified database, tracking institutional details, admissions, finances, and outcomes over time.
