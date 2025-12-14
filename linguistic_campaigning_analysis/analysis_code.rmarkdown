@@ -1,0 +1,182 @@
+---
+format:
+  pdf:
+    documentclass: article
+    classoption: [compact]
+fontsize: 10pt
+geometry: margin=0.6in
+---
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(quanteda)
+library(quanteda.textstats)
+library(quanteda.extras)
+library(tidyverse)
+library(gt)
+library(ggraph)
+library(stringr)
+library(dplyr)
+
+# Load the data  
+policy_text <- read.csv("policy-text.csv")
+policy_biber <- read.csv("policy-biber.csv")
+policy_spacy_parsed <- read.csv("policy-spacy-parsed.csv")
+```
+## Vermin's Best Interest, by Jasmine Kwok and Betsy Fridman
+
+### Statement of Problem
+
+Overdispersed Strategies was recently commissioned by the 2028 presidential candidate, Vermin Supreme to develop effective campaign messages that will reach voters specifically in swing states. This project aims to analyze patterns in past policy statements of Congressional candidates to understand similarities and differences in writing styles of candidates from different parties, Republican and Democratic, and candidates who won and lost. This analysis utilizes 2018, 2020, and 2022 Congressional election texts collected for every candidate from CampaignView. Through the use of collocation and keyness analysis, this project will provide insights to support Vermin Supreme in tailoring his messages to appeal to diverse voters and maximize his campaign effectiveness.
+
+### Summary of Findings
+
+The collocation analysis on the noun health shows distinct linguistic stylistic differences in writing between Republican and Democratic parties. The following items were identified amongst the top ten collocates of the noun health in the Democrat policy statements using MI statistics (L5-R5, NC15, PMI\>5.5): behavioral, substance, maternal, centers, and parenthood (see Appendix). This suggests that democratic policy statements often include socially and ethically driven terms which reflect a focus on equity, public health, and human welfare. Contrastingly, Republican policy statements emphasize economic terms, framing health through a market-based lens by focusing on costs, transparency, and efficiency. Some examples of health collocates in Republican policy statements using MI statistics (L5-R5, NC15, PMI\>5.5) are affordable, savings, purchase, providers, and plans (see Appendix). Some shared health collocations present in both parties include care, mental, women, coverage, and insurance which highlights main concerns of the general public (see Appendix).
+
+Analysis of modal verbs in policy speeches from swing states, Arizona, Nevada, Georgia, Michigan, North Carolina, Pennsylvania, Wisconsin, New Hampshire, and Minnesota, highlights clear distinctions between winning and losing campaigns. The modals can (LL = −71.09), should (LL = −67.60), and will (LL = −58.02) stand out as statistically most distinctive, appearing with higher relative frequency in winning speeches than in losing ones. In practical terms, this suggests that winning campaigns emphasize certainty, obligation, and capability in their messaging as the word will signal determination or promises, should convey normative expectations, and can emphasize potential or empowerment. These rhetorical choices appear to help winning candidates persuade or mobilize audiences more effectively in swing states.
+
+### Recommendations
+
+To align messaging with Democratic values and voter expectations, Vermin Supreme should adopt a tone that emphasizes empathy, equity, and collective well-being. Language that highlights compassion, care, and accessibility will resonate with audiences who prioritize social justice and personal welfare. At the same time, integrating economic and structural framing—for instance, discussing oral hygiene as he advocates for mandatory toothbrushing laws in terms of affordability, infrastructure, and preventive care—can appeal to voters concerned with fiscal responsibility and systemic reform. Blending these two perspectives allows for a broader appeal, positioning health and hygiene as both a right and a responsibility. Framing messages around shared concerns—such as care, insurance, and coverage—can unify diverse audiences and make the campaign’s platform appear pragmatic, inclusive, and solutions-oriented.
+
+An analysis of modal verb use in swing-state policy statements suggests that winning candidates favor more confident, concrete language than losing ones. Terms such as can, should, will, must, and could appear significantly more often in losing campaigns, indicating a tendency toward tentative or overly prescriptive phrasing. To strengthen his appeal, Vermin should minimize reliance on such modals and instead use direct, decisive statements that convey capability and commitment—for example, “We will ensure every American has a free pony and access to zombie-powered renewable energy,” rather than “We should work toward…”. Framing policies in actionable, confident language will help project leadership, inspire trust, and communicate a sense of certainty and follow-through, traits voters associate with successful candidates.
+
+### Appendix
+
+#### Table 1 - Frequency and dispersion measures for top 5 tokens in Democratic Policy Statements
+
+```{r warning=FALSE}
+## Cleaning and Tokenizing Data - Democrats vs Republican Texts
+
+# filtered win & lose texts 
+democrat_texts <- policy_text |>  
+  filter(cand_party == "Democrat") 
+republican_texts <- policy_text |>  
+  filter(cand_party == "Republican")
+
+# Create corpus from winning candidates
+democrat_corpus <- corpus(democrat_texts$issue_text)
+republican_corpus <-corpus(republican_texts$issue_text)
+
+# tokenize the corpora 
+democrat_tkns <- tokens(tolower(democrat_corpus), what = "fastestword", remove_punct = TRUE, remove_numbers = TRUE)
+republican_tkns <- tokens(tolower(republican_corpus), what = "fastestword", remove_punct = TRUE, remove_numbers = TRUE)
+
+# remove stop words 
+democrat_tkns <- tokens_remove(democrat_tkns, stopwords("en"))
+republican_tkns<- tokens_remove(republican_tkns, stopwords("en"))
+
+# create document feature matrix 
+democrat_dfm <- dfm(democrat_tkns)
+republican_dfm <- dfm(republican_tkns)
+```
+
+```{r warning=FALSE, message=FALSE}
+# frequency table of tokens in different texts 
+democrat_ft <- frequency_table(democrat_tkns)
+republican_ft <- frequency_table(republican_tkns)
+
+knitr::kable(head(democrat_ft, 20), digits = 10)
+```
+
+#### Table 2 - Frequency and dispersion measures for all tokens in Republican Policy Statements
+
+```{r warning=FALSE, message=FALSE}
+knitr::kable(head(republican_ft,20), digits = 10)
+```
+
+#### Figure 1 - Health Collocation Network: Democratic vs Republican
+
+```{r warning=FALSE}
+dem_health_collocations <- collocates_by_MI(democrat_tkns, "health", left = 5, right = 5) |> filter(col_freq >= 15, PMI >= 5.5)
+rep_health_collocations <- collocates_by_MI(republican_tkns, "health", left = 5, right = 5) |> filter(col_freq >= 15, PMI >= 5.5)
+
+net <- col_network(dem_health_collocations, rep_health_collocations)
+
+net <- net %>%
+  mutate(label = case_when(
+    id == 1 ~ "health_Democrat",
+    id == 2 ~ "health_Republican",
+    TRUE ~ label  
+  ))
+
+ggraph(net, weight = link_weight, layout = "stress") + 
+  geom_edge_link(color = "gray80", alpha = .75) + 
+  geom_node_point(aes(alpha = node_weight, size = 3, color = n_intersects)) +
+  geom_node_text(aes(label = label), repel = T, size = 3) +
+  scale_alpha(range = c(0.2, 0.9)) +
+  theme_graph() +
+  theme(legend.position="none",
+        plot.title = element_text(
+      size = 16,        
+      face = "bold",   
+      hjust = 0.5,    
+      vjust = 1        
+    )) 
+```
+
+#### Figure 2 - 
+
+```{r, warning=FALSE}
+# Chose our swing states
+swing_states <- c("AZ", "NV", "GA", "MI", "NC", "PA", "WI", "NH", "MN")
+
+# Joined datasets
+policy_win_general <- policy_text |>
+  select(c(doc_id, win_general, state_postal))
+merged <- policy_spacy_parsed |>
+  left_join(policy_win_general, by = "doc_id") |>
+  filter(win_general %in% c(0,1)) |>
+  filter(state_postal %in% swing_states)
+
+anno_edit <- merged |>
+  dplyr::select(win_general, doc_id, sentence_id, token_id, token, lemma,
+                head_token_id, dep_rel, win_general, pos, tag)
+anno_edit <- anno_edit %>%
+  mutate(
+    # fix contractions
+    token = case_when(
+      token == "'d" ~ "would",
+      token == "'ll" ~ "will",
+      token == "ll" ~ "will",
+      token == "wo" ~ "will",
+      token == "ca" ~ "can",
+      TRUE ~ token
+    ))
+    
+anno_edit <- structure(anno_edit, class = c("spacyr_parsed", "data.frame"))
+sub_tkns <- as.tokens(anno_edit, include_pos = "tag", concatenator = "_")
+
+
+doc_categories <- merged %>%
+  dplyr::select(doc_id, win_general) %>%
+  distinct()  # keep one row per document
+
+# Make sure the order matches names(sub_tkns)
+doc_categories <- doc_categories %>%
+  arrange(match(doc_id, names(sub_tkns)))
+
+# Attach as docvars
+docvars(sub_tkns) <- doc_categories["win_general"]
+
+# Now you can make dfms
+sub_dfm <- dfm(sub_tkns)
+
+# Create two subsets
+win_dfm <- dfm_subset(sub_dfm, win_general == 1) |> dfm_trim(min_termfreq = 1)
+lose_dfm <- dfm_subset(sub_dfm, win_general == 0) |> dfm_trim(min_termfreq = 1)
+
+# Keyness Table
+win_lose_keyness <- keyness_table(win_dfm, lose_dfm) |>
+  separate(col = Token, into = c("Token", "Tag"), sep = "_")
+
+win_lose_keyness |>
+  filter(Tag == "md", AF_Tar > 1 | AF_Ref > 1) |>
+  arrange(desc(LL)) |>
+  gt() |>
+  fmt_number(columns = c('LL', 'LR', 'Per_10.6_Tar', 'Per_10.6_Ref'), decimals = 2) |>
+  fmt_number(columns = c('DP_Tar', 'DP_Ref'), decimals = 3) |>
+  fmt_number(columns = c('PV'), decimals = 5)
+
+
+```
+
