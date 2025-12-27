@@ -11,7 +11,7 @@ This repository contains a collection of data science, statistical analysis, and
 Focus: Client segmentation and strategic analysis using behavioral and transactional data.
 Methods: Exploratory data analysis, clustering, time series visualization, and principal component analysis.
 Languages: R
-Libraries: readr, tidyverse, forecast, stats
+Libraries: readr, tidyverse
 
 ---
 
@@ -20,7 +20,7 @@ Libraries: readr, tidyverse, forecast, stats
 Focus: End-to-end ETL (Extract, Transform, Load) and analysis of college-level educational data.
 Methods: Data ingestion, database connectivity, cleaning, transformation, and statistical summaries.
 Languages: Python, SQL
-Libraries: pandas, numpy, sqlalchemy, psycopg2
+Libraries: pandas, numpy, sqlalchemy, psycopg2, streamlit, altair
 
 ---
 
