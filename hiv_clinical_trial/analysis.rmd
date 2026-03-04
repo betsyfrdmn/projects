@@ -1,0 +1,278 @@
+---
+title: "HIV Analysis"
+author: "Betsy Fridman"
+date: "2025-11-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readr)
+```
+
+# Load & clean data
+```{r}
+hiv <- read.csv("~/Desktop/MADS Fall/Applied Linear Models/HIV Project/HIV.treatments.csv")
+hiv <- 
+  hiv |>
+  mutate(cd4_20_difference = cd4.20-cd4,
+         cd4_96_difference = cd4.96-cd4.20)
+hiv <-
+  hiv |>
+  filter(offtreat == 0)
+
+break_points <- c(0, 8, 366, 9999)
+
+hiv$predays_coded <-
+  cut(hiv$predays, breaks = break_points, labels = c("No", "Short", "Long"), include.lowest=TRUE)
+# added levels
+
+```
+
+
+# Exploratory Data Analysis
+```{r}
+# Response var. 1
+ggplot(data = hiv, aes(x = cd4_20_difference))+
+  geom_density()+
+  theme_minimal()+
+  labs(x = "Difference in CD4 count (20 weeks - baseline)",
+       y = "Density",
+       title = "Density Plot of CD4 Cell Count Difference Between 0 and 20 Weeks")
+```
+
+```{r}
+# Response var. 2
+ggplot(data = hiv, aes(x = cd4_96_difference))+
+  geom_density()+
+  theme_minimal()+
+  labs(x = "Difference in CD4 count (96 weeks - 20 weeks)",
+       y = "Density",
+       title = "Density Plot of CD4 Cell Count Difference Between 20 and 96 Weeks")
+```
+
+```{r}
+# Covariate of interest 1
+ggplot(data = hiv, aes(x = cd4))+
+  geom_density()+
+  theme_minimal()+
+  labs(x = "CD4 count at baseline",
+       y = "Density",
+       title = "Density Plot of CD4 Cell Count at Baseline")
+
+
+ggplot(data = hiv, aes(x = cd4))+
+  geom_density()+
+  theme_minimal()+
+  labs(x = "CD4 count at baseline",
+       y = "Density",
+       title = "Density Plot of CD4 Cell Count at Baseline")
+```
+
+```{r}
+# Covariate of interest 2: predays
+ggplot(data = hiv, aes(x = as.factor(predays_coded)))+
+  geom_bar(fill = 'dodgerblue3')+
+  theme_minimal()+
+  labs(x = "Time intervals indicating patient history of prior HIV therapy",
+       y = "Number of patients",
+       title = "Bar Plot of Patients By History of Prior HIV Therapy")
+```
+
+```{r}
+# Covariate of interest 3: treat2
+
+hiv_less_advanced <-
+  hiv |>
+  filter(nocd4.96 == 1)
+
+ggplot(data = hiv_less_advanced, aes(x = as.factor(treat2)))+
+  geom_bar(fill = 'dodgerblue3')+
+  theme_minimal()+
+  labs(x = "Categories of Drug Treatments in RCT",
+       y = "Number of patients",
+       title = "Distribution of Patients Across Drug Treatments")+
+  scale_x_discrete(labels = c("Drug A", "Drug B", "Drugs A and B", "Drugs A and C"))
+```
+
+response: cd4.20, cd4.96, cd4
+
+Include:
+  
+  age - continuous
+wt - continuous
+hemo - factor
+drugs - factor
+oprior - factor
+a30 - factor
+predays - do something about it, keep or bin into something like hist2
+race - factor
+gender - factor
+symptom - factor
+cd4 - continuous (mabe factor for question 3)
+cd8 - continuous
+treat2 - continuous
+
+
+Exclude:
+  homo - homosexual activity doesn't affect the response to therapy, it only increases likelihood of diagnosis
+karnof - idk, man-made score, sounds good but too good to be true
+aprior - we would include this if everyone wasn't a 1
+hist
+hist2
+treat
+offtreat
+cd4.96, don't really have to explain
+nocd4.96
+cd8.20, should explain maybe
+cens
+days
+
+Limitation when explaining the data or eda: we don't know why people drop out and the reason for missing cd4.96 values
+
+
+
+In eda, look to see if there's an interaction between cd4 and treat2
+
+Question 1, would include cd4*treat2 but that would mess up my interpretation of cd4
+
+
+
+Question 1:
+cd4.20 - cd4 ~ cd4 + others
+talk about if the beta of cd4 is significant and what is the sign
+
+Question 2: 
+cd4.20 - cd4 ~ predays binned + others
+talk about if the beta of predays binned is significant and what is the sign
+
+Question 3:
+cd4.96 - cd4 ~ cd4 binned into less advanced (higher cd4) and more advanced (lower cd4)
+talk about the coefficient of the higher cd4 bin and if its significant
+
+Research Question 1
+```{r}
+model_q1 <- lm(cd4_20_difference ~ 
+                 cd4 + age + wt + 
+                 as.factor(hemo) + as.factor(drugs) + 
+                 as.factor(oprior) + as.factor(a30) + 
+                 as.factor(predays_coded) + as.factor(race) + as.factor(gender) + 
+                 as.factor(symptom) + cd8 + as.factor(treat2), data=hiv)
+# Assess if `cd4` is significant in estimating `cd4.20 - cd4`
+summary(model_q1)
+confint(model_q1, 'cd4')
+```
+
+Research Question 2
+```{r}
+reduced_q2 <- lm(cd4_20_difference ~ 
+                 cd4 + age + wt + # excluding predays_coded 
+                 as.factor(hemo) + as.factor(drugs) + 
+                 as.factor(oprior) + as.factor(a30) + 
+                 as.factor(race) + as.factor(gender) +
+                 as.factor(symptom) + cd8 + as.factor(treat2), data=hiv)
+
+full_q2 <- lm(cd4_20_difference ~ 
+                 as.factor(predays_coded)+ cd4 + age + wt + # including predays_coded 
+                 as.factor(hemo) + as.factor(drugs) + 
+                 as.factor(oprior) + as.factor(a30) + 
+                 as.factor(race) + as.factor(gender) + 
+                 as.factor(symptom) + cd8 + as.factor(treat2), data=hiv)
+
+anova(reduced_q2, full_q2)
+```
+
+Research Question 3
+```{r}
+hiv_less_advanced <-
+  hiv |>
+  filter(cd4 >= 500) # "A normal range is about 500-1,500"
+
+# Filter out observations where patient didn't make it
+hiv_less_advanced <-
+  hiv |>
+  filter(nocd4.96 != 0) # Lost about 600 observations, n = 1342 now
+
+reduced_q3 <- lm(cd4_96_difference ~ 
+                 cd4 + age + wt + # excluding treat2
+                 as.factor(hemo) + as.factor(drugs) + 
+                 as.factor(oprior) + as.factor(a30) + 
+                 predays + as.factor(race) + as.factor(gender) + 
+                 as.factor(symptom) + cd8, data=hiv_less_advanced)
+
+full_q3 <- lm(cd4_96_difference ~ 
+                 as.factor(treat2) + cd4 + age + wt + # including treat2
+                 as.factor(hemo) + as.factor(drugs) + 
+                 as.factor(oprior) + as.factor(a30) + 
+                 predays + as.factor(race) + as.factor(gender) + 
+                 as.factor(symptom) + cd8, data=hiv_less_advanced)
+# Partial F Test -- won't use
+anova(reduced_q3, full_q3)
+
+# Confidence intervals for betas
+summary(full_q3)
+confint(full_q3, level = 0.95)
+```
+
+```{r}
+ggplot(data = hiv, aes(x = cd4, y = (cd4.96-cd4.20)))+
+  geom_point()
+```
+
+# Diagnostics
+```{r}
+diagnostics <- function(model, alpha, samplesize) {
+  
+  standardr <- rstandard(model)
+  fittedr <- fitted(model)
+  plot(fittedr, standardr,
+       xlab = "Fitted values",
+       ylab = "Standardized residuals",
+       title = "Standardized residuals v. fitted plot")
+  abline(h = c(-2, 2))# plot 1) standardized residuals vs. fitted plot
+  
+  library(car)
+  qqPlot(standardr, distribution = "norm") # plot 2) qqPlot of standardized residuals
+  
+  studentr <- rstudent(model)
+  plot(fittedr, studentr,
+       xlab = "Fitted values",
+       ylab = "Studentized residuals",
+       title = "Studentized residuals v. fitted plot")
+  abline(h = c(alpha/(2*samplesize),1-(alpha/(2*samplesize)))) # plot 3) studentized residuals v. fitted plot
+  
+  plot(model, which = 5) # plot 4) residuals v. leverage plot
+  
+}
+```
+
+RQ 1
+```{r}
+diagnostics(model_q1, 0.95, 1363)
+```
+
+Levels:
+0=Drug A alone
+1=Drugs A and B
+2=Drugs A and C
+3=Drug B alone
+
+Given:
+- "Drug A: a survival advantage is not conferred by prolonged therapy in asymptomatic subjects"
+
+Analysis:
+- Drug A is a good baseline because it does not produce a clinical benefit.
+- It is neutral for all intensive purposes, so CIs of other treatments with only positive values shows significant increase in cd cell count difference from 0 to 96 weeks. AKA, there is prolonged clinical benefit from each of the other three drug therapies: A and B, A and C, and B alone.
+- Does not concur with the other statements in data description of A and C not producing a clinical benefit
+
+Conclusion:
+- Given background information and analysis, A and B is most likely to produce a prolonged benefit
+- There is evidence to suggest that there is prolonged clinical benefit from treatments as a whole
+- Specifically A and B because
+a) "Effective treatment of HIV disease will probably require combination therapy"
+b) "A combination of Drug A and Drug C did not produce a clinical benefit"
+- Leaves us with A and B

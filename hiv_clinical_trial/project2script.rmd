@@ -1,0 +1,122 @@
+---
+title: "Official Project 2 Script"
+author: "Betsy Fridman"
+date: "2025-11-13"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+library(readr)
+```
+
+Read in data
+
+```{r}
+hiv <- read.csv("~/Desktop/MADS Fall/Applied Linear Models/HIV Project/HIV.treatments.csv")
+hiv$hist <- as.factor(hiv$hist)
+hiv$hist2 <- as.factor(hiv$hist2)
+hiv$oprior <- as.factor(hiv$oprior)
+hiv$aprior <- as.factor(hiv$aprior)
+```
+
+Packages
+
+```{r}
+library(tidyverse)
+```
+
+96 week data
+
+```{r}
+sum(is.na(hiv$cd4.96))
+sum(hiv$nocd4.96 == 0, na.rm = TRUE)
+```
+
+The counts of missing individuals at 96 weeks is the same across the two
+statistics.
+
+Check assumption
+
+```{r}
+range(hiv$cd4)
+```
+
+Assumption is not true. The data set says values for CD4 at baseline are
+between 200-500. Here, the values for CD4 range from 0-1199.
+
+# Professor's pointers
+
+Predays and hist
+
+```{r}
+ggplot(data = hiv,
+       aes(x = hist, y = predays))+
+  geom_boxplot() +
+  labs(x = "HIV therapy prior to history",
+       y = "Number of days of previously received HIV therapy",
+       title = "Days of previously received HIV therapy, if received")+
+  theme_minimal()
+```
+
+Strong relationship. Measure the same thing. May want to choose one of
+two to include in the model.
+
+Predays and hist2
+
+```{r}
+ggplot(data = hiv,
+       aes(x = hist2, y = predays))+
+  geom_boxplot()+
+  labs(x = "HIV therapy prior to history",
+       y = "Number of days of previously received HIV therapy",
+       title = "Days of previously received HIV therapy, if received")
+```
+
+How is it possible for categories to overlap in predays?
+
+```{r}
+range(hiv$predays[hiv$hist2 == 3])
+```
+
+Range of predays for hist2 1st category: 0-7 Range of predays for hist2
+1st category: 10-2851 Range of predays for hist2 3rd category: 20-2500
+
+Measure slightly different things (or data error) I would include
+predays and hist2 both in the model
+
+hist and hist2
+
+```{r}
+table(hiv$hist, hiv$hist2)
+```
+
+This checks out. Only need one of hist and hist2 in the model.
+
+hist, oprior, and aprior
+
+```{r}
+table(hiv$oprior, hiv$aprior)
+table(hiv$hist, hiv$oprior)
+table(hiv$hist, hiv$aprior)  # sum of prior table across all columns
+```
+
+# Other drugs vs. just drug A prior history table
+
+Everyone used drug A prior to treatment initiation. 47 individuals also
+used other drugs prior to treatment initiation.
+
+# History of prior drug therapy vs. other drugs beyond drug A table
+
+886 listed as "no HIV therapy history prior to study" did not use drugs
+outside of Drug A prior to study \*\* Problem: Why are patients listed
+as "no HIV therapy prior to study" if everyone used drug A prior to
+treatment initiation? \*\* 47/2139 patients listed as having HIV therapy
+prior to the study used drugs outside of just drug A
+
+# History of prior drug therapy vs. just used drug A therapy
+
+Most patients have prior HIV drug therapy history
